@@ -52,6 +52,8 @@ tags_metadata = [
     },
 ]
 
+api_key_validator = ApiKeyValidator()
+
 app = FastAPI(
     title="Anidong Api",
     description=description,
@@ -79,6 +81,7 @@ stats_middleware = StatsMiddleware(app)
 
 app.state.api_key_validator = api_key_validator
 app.state.stats_middleware = stats_middleware
+app.state.rate_limit_middleware = rate_limit_middleware
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
@@ -90,8 +93,8 @@ app.add_middleware(CORSMiddleware,
     allow_headers=["*"],
 )
 
-app.add_middleware(RateLimitMiddleware, api_key_validator=api_key_validator)
-app.add_middleware(StatsMiddleware)
+app.add_middleware(lambda app: rate_limit_middleware)
+app.add_middleware(lambda app: stats_middleware)
 
 app.include_router(public_router, prefix="/api/v1")
 app.include_router(private_router, prefix="/api/v1")
