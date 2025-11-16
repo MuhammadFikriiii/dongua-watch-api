@@ -61,6 +61,11 @@ app = FastAPI(
     redoc_url=None,
     openapi_url="/api/v1/openapi.json",
     swagger_ui_parameters={
+        "defaultModelsExpandDepth": -1,
+        "docExpansion": "none",
+        "filter": True,
+        "showExtensions": True,
+        "showCommonExtensions": True,
         "syntaxHighlight": {
             "theme": "obsidian"
         }
@@ -71,6 +76,9 @@ app = FastAPI(
 api_key_validator = ApiKeyValidator()
 rate_limit_middleware = RateLimitMiddleware(app, api_key_validator)
 stats_middleware = StatsMiddleware(app)
+
+app.state.api_key_validator = api_key_validator
+app.state.stats_middleware = stats_middleware
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
@@ -177,17 +185,4 @@ def custom_openapi():
     
 app.openapi = custom_openapi
 
-if __name__ == "__main__":
-    import uvicorn
-    
-    host = config("HOST", default="0.0.0.0")
-    port = config("PORT", default=8000, cast=int)
-    debug = config("DEBUG", default=False, cast=bool)
-    
-    uvicorn.run(
-        "app.main:app",
-        host=host,
-        port=port,
-        reload=debug,
-        access_log=True
-    )
+app = app
