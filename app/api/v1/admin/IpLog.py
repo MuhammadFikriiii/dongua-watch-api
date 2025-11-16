@@ -20,8 +20,10 @@ import json
 from typing import List, Optional
 from app.api.models.BaseResponse import BaseResponse, ErrorResponse
 from app.api.models.AdminModel import IpLogsResponse
+from app.api.models.ApiKeyValidator import ApiKeyValidator
 
 router = APIRouter()
+api_key_validator = ApiKeyValidator()
 
 @router.get(
     "/ip_logs",
