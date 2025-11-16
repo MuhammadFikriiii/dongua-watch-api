@@ -17,7 +17,7 @@
 from fastapi import APIRouter, Query, HTTPException
 from typing import Optional, List
 from app.api.models.BaseResponse import BaseResponse, ErrorResponse
-from app.api.models.AnimeModel import AnimeFiltersResponse, AnimeListResponse, AnimeListModeResponse
+from app.api.models.AnimeModel import AnimeFiltersResponse, AnimeListResponse
 from app.api.models.parser.AnimeParser import AnimeParser
 
 router = APIRouter()
