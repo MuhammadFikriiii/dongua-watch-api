@@ -1,11 +1,7 @@
-fastapi[all]
 fastapi==0.121.2
 fastapi-limiter==0.1.6
-fastapi-core==1.2.0
-starlette==0.50.0
+starlette==0.40.0
 pydantic==2.12.4
-pydantic2==1.1.15
-pydantic3==1.0.14
 uvicorn==0.38.0
 httpx==0.28.1
 aiohttp==3.13.2
