@@ -1,24 +1,6 @@
-
-#
-#             Zhadevv Project
-#             --MIT License--
-#
-# Feed Me Starnya Bang:>
-# Project 100% Open Source
-# Bebas Recode, Deploy Production. KECUALI
-# Diperjual-Belikan.
-#
-# Project ini Sepenuhnya Gratis, Makannua ksih Bintang Dong anj:>
-# *bercanda ajahh
-#
-# Regards
-# Zhadevv
-#
-
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Request
 from app.api.models.BaseResponse import BaseResponse, ErrorResponse
 from app.api.models.AdminModel import UnbanIpRequest, UnbanIpResponse
-from app.api.middleware import RateLimitMiddleware
 
 router = APIRouter()
 
@@ -30,13 +12,15 @@ router = APIRouter()
     include_in_schema=False
 )
 async def unban_ip_address(
+    request: Request,
     ip: str = Query(..., description="IP address to unban"),
     apikey: str = Query(..., description="Admin API key for authorization")
 ):
     try:
-        from app.main import rate_limit_middleware
+        api_key_validator = request.app.state.api_key_validator
+        rate_limit_middleware = request.app.state.rate_limit_middleware
         
-        admin_validation = rate_limit_middleware.api_key_validator.validate_key(apikey)
+        admin_validation = api_key_validator.validate_key(apikey)
         if not admin_validation["valid"] or admin_validation["tier"] not in ["admin", "dev", "owner"]:
             return ErrorResponse(
                 status=401,
