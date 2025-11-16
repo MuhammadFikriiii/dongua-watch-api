@@ -19,8 +19,6 @@ async def ban_ip_address(
     apikey: str = Query(..., description="Admin API key for authorization")
 ):
     try:
-        api_key_validator = request.app.state.api_key_validator
-        
         admin_validation = api_key_validator.validate_key(apikey)
         if not admin_validation["valid"] or admin_validation["tier"] not in ["admin", "dev", "owner"]:
             return ErrorResponse(
