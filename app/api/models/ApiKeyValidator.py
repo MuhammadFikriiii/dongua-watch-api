@@ -21,6 +21,7 @@ from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
 
 class ApiKeyTier(BaseModel):
@@ -28,7 +29,7 @@ class ApiKeyTier(BaseModel):
     monthly_limit: int
     requests_per_minute: int
     requests_per_second: Optional[int] = None
-    
+
 class ApiKeyData(BaseModel):
     key: str
     tier: str
@@ -38,7 +39,7 @@ class ApiKeyData(BaseModel):
     created_at: str
     last_used: Optional[str] = None
     is_active: bool = True
-    
+
 class ApiKeyValidator:
     TIERS = {
         "guest": ApiKeyTier(name="guest", monthly_limit=1000, requests_per_minute=60),
@@ -47,35 +48,61 @@ class ApiKeyValidator:
         "dev": ApiKeyTier(name="dev", monthly_limit=-1, requests_per_minute=1000, requests_per_second=1000),
         "owner": ApiKeyTier(name="owner", monthly_limit=-1, requests_per_minute=10000, requests_per_second=10000)
     }
-    
+
     def __init__(self, data_dir: str = "data"):
         self.data_dir = data_dir
         self.free_keys_file = os.path.join(data_dir, "free_keys.json")
-        self._ensure_data_dir()
-        self._load_free_keys()
+        self._is_vercel = os.environ.get("VERCEL") == "1"
+        
+        # Load admin keys from environment
         self.admin_keys = {
             "admin": os.getenv("ADM_KEY", ""),
             "dev": os.getenv("DEV_KEY", ""),
             "owner": os.getenv("OWN_KEY", "")
         }
         
+        if self._is_vercel:
+            # Use in-memory storage for Vercel
+            self.free_keys = {}
+            print("🔧 Using in-memory storage for Vercel environment")
+        else:
+            # Use file-based storage for local development
+            self._ensure_data_dir()
+            self._load_free_keys()
+
     def _ensure_data_dir(self):
-        os.makedirs(self.data_dir, exist_ok=True)
-        if not os.path.exists(self.free_keys_file):
-            with open(self.free_keys_file, 'w') as f:
-                json.dump({}, f)
-                
-    def _load_free_keys(self):
+        """Create data directory for local development only"""
         try:
-            with open(self.free_keys_file, 'r') as f:
-                self.free_keys = json.load(f)
+            os.makedirs(self.data_dir, exist_ok=True)
+            if not os.path.exists(self.free_keys_file):
+                with open(self.free_keys_file, 'w') as f:
+                    json.dump({}, f)
+        except OSError as e:
+            print(f"⚠️ Warning: Could not create data directory: {e}")
+            print("🔧 Falling back to in-memory storage")
+            self._is_vercel = True
+            self.free_keys = {}
+
+    def _load_free_keys(self):
+        """Load free keys from file or use empty dict"""
+        try:
+            if os.path.exists(self.free_keys_file):
+                with open(self.free_keys_file, 'r') as f:
+                    self.free_keys = json.load(f)
+            else:
+                self.free_keys = {}
         except (FileNotFoundError, json.JSONDecodeError):
             self.free_keys = {}
-            
+
     def _save_free_keys(self):
-        with open(self.free_keys_file, 'w') as f:
-            json.dump(self.free_keys, f, indent=2)
-            
+        """Save free keys to file if not in Vercel"""
+        if not self._is_vercel:
+            try:
+                with open(self.free_keys_file, 'w') as f:
+                    json.dump(self.free_keys, f, indent=2)
+            except OSError as e:
+                print(f"⚠️ Warning: Could not save free keys: {e}")
+
     def validate_key(self, api_key: Optional[str]) -> Dict[str, Any]:
         if not api_key:
             return {
@@ -84,21 +111,22 @@ class ApiKeyValidator:
                 "monthly_limit": self.TIERS["guest"].monthly_limit,
                 "requests_per_minute": self.TIERS["guest"].requests_per_minute
             }
-            
+
+        # Check free keys first
         if api_key in self.free_keys:
             key_data = self.free_keys[api_key]
             if not key_data.get("is_active", True):
                 return {"valid": False, "error": "API key is inactive"}
-                
+            
             tier_name = key_data.get("tier", "free")
             if tier_name not in self.TIERS:
                 tier_name = "free"
-                
+            
             tier = self.TIERS[tier_name]
             
             if tier.monthly_limit != -1 and key_data.get("monthly_requests", 0) >= tier.monthly_limit:
                 return {"valid": False, "error": "Monthly limit exceeded"}
-                
+            
             key_data["last_used"] = datetime.now().isoformat()
             key_data["total_requests"] = key_data.get("total_requests", 0) + 1
             key_data["monthly_requests"] = key_data.get("monthly_requests", 0) + 1
@@ -116,7 +144,8 @@ class ApiKeyValidator:
                 "monthly_requests": key_data.get("monthly_requests", 0),
                 "total_requests": key_data.get("total_requests", 0)
             }
-            
+
+        # Check admin keys
         for tier_name, env_key in self.admin_keys.items():
             if env_key and api_key == env_key:
                 tier = self.TIERS[tier_name]
@@ -127,15 +156,15 @@ class ApiKeyValidator:
                     "requests_per_minute": tier.requests_per_minute,
                     "requests_per_second": tier.requests_per_second
                 }
-                
+
         return {"valid": False, "error": "Invalid API key"}
-        
+
     def generate_key(self, user: Optional[str] = None, custom_key: Optional[str] = None, 
                     limit: int = 5000, admin_key: str = None) -> Dict[str, Any]:
         admin_validation = self.validate_key(admin_key)
         if not admin_validation["valid"] or admin_validation["tier"] not in ["admin", "dev", "owner"]:
             return {"success": False, "error": "Invalid admin API key"}
-            
+
         if custom_key:
             if custom_key in self.free_keys:
                 return {"success": False, "error": "Custom key already exists"}
@@ -145,7 +174,7 @@ class ApiKeyValidator:
             import string
             characters = string.ascii_letters + string.digits
             new_key = f"SK_Free_Anidong_Keys_{''.join(secrets.choice(characters) for _ in range(16))}"
-            
+
         key_data = {
             "key": new_key,
             "tier": "free",
@@ -157,10 +186,10 @@ class ApiKeyValidator:
             "last_used": None,
             "is_active": True
         }
-        
+
         self.free_keys[new_key] = key_data
         self._save_free_keys()
-        
+
         return {
             "success": True,
             "key": new_key,
@@ -168,24 +197,24 @@ class ApiKeyValidator:
             "monthly_limit": limit,
             "created_at": key_data["created_at"]
         }
-        
+
     def remove_key(self, key: str, admin_key: str) -> Dict[str, Any]:
         admin_validation = self.validate_key(admin_key)
         if not admin_validation["valid"] or admin_validation["tier"] not in ["admin", "dev", "owner"]:
             return {"success": False, "error": "Invalid admin API key"}
-            
+
         if key in self.free_keys:
             del self.free_keys[key]
             self._save_free_keys()
             return {"success": True, "message": "Key removed successfully"}
         else:
             return {"success": False, "error": "Key not found"}
-            
+
     def get_key_stats(self, api_key: str) -> Dict[str, Any]:
         validation = self.validate_key(api_key)
         if not validation["valid"]:
             return validation
-            
+
         if api_key in self.free_keys:
             key_data = self.free_keys[api_key]
             return {
@@ -200,7 +229,7 @@ class ApiKeyValidator:
                 "last_used": key_data.get("last_used"),
                 "is_active": key_data.get("is_active", True)
             }
-            
+
         return {
             "valid": True,
             "key": api_key,
@@ -209,7 +238,7 @@ class ApiKeyValidator:
             "total_requests": 0,
             "monthly_limit": validation["monthly_limit"]
         }
-        
+
     def reset_monthly_limits(self):
         current_month = datetime.now().strftime("%Y-%m")
         for key_data in self.free_keys.values():
@@ -217,12 +246,12 @@ class ApiKeyValidator:
             if created_month != current_month:
                 key_data["monthly_requests"] = 0
         self._save_free_keys()
-        
+
     def get_all_free_keys(self, admin_key: str) -> Dict[str, Any]:
         admin_validation = self.validate_key(admin_key)
         if not admin_validation["valid"] or admin_validation["tier"] not in ["admin", "dev", "owner"]:
             return {"success": False, "error": "Invalid admin API key"}
-            
+
         return {
             "success": True,
             "keys": self.free_keys,
