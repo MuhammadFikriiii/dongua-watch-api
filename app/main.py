@@ -93,8 +93,8 @@ app.add_middleware(CORSMiddleware,
     allow_headers=["*"],
 )
 
-app.add_middleware(lambda app: rate_limit_middleware)
-app.add_middleware(lambda app: stats_middleware)
+app.add_middleware(rate_limit_middleware)
+app.add_middleware(stats_middleware)
 
 app.include_router(public_router, prefix="/api/v1")
 app.include_router(private_router, prefix="/api/v1")
