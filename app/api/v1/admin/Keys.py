@@ -1,20 +1,4 @@
-#
-#             Zhadevv Project
-#             --MIT License--
-#
-# Feed Me Starnya Bang:>
-# Project 100% Open Source
-# Bebas Recode, Deploy Production. KECUALI
-# Diperjual-Belikan.
-#
-# Project ini Sepenuhnya Gratis, Makannua ksih Bintang Dong anj:>
-# *bercanda ajahh
-#
-# Regards
-# Zhadevv
-#
-
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Request
 from app.api.models.BaseResponse import BaseResponse, ErrorResponse
 from app.api.models.AdminModel import FreeKeysResponse, BannedIpsResponse
 
@@ -28,12 +12,13 @@ router = APIRouter()
     include_in_schema=False
 )
 async def get_free_keys(
+    request: Request,
     apikey: str = Query(..., description="Admin API key for authorization")
 ):
     try:
-        from app.main import rate_limit_middleware
+        api_key_validator = request.app.state.api_key_validator
         
-        admin_validation = rate_limit_middleware.api_key_validator.validate_key(apikey)
+        admin_validation = api_key_validator.validate_key(apikey)
         if not admin_validation["valid"] or admin_validation["tier"] not in ["admin", "dev", "owner"]:
             return ErrorResponse(
                 status=401,
@@ -41,7 +26,7 @@ async def get_free_keys(
                 message="Invalid admin API key"
             )
         
-        result = rate_limit_middleware.api_key_validator.get_all_free_keys(apikey)
+        result = api_key_validator.get_all_free_keys(apikey)
         
         if not result["success"]:
             return ErrorResponse(
@@ -73,12 +58,14 @@ async def get_free_keys(
     include_in_schema=False
 )
 async def get_banned_ips(
+    request: Request,
     apikey: str = Query(..., description="Admin API key for authorization")
 ):
     try:
-        from app.main import rate_limit_middleware
+        api_key_validator = request.app.state.api_key_validator
+        rate_limit_middleware = request.app.state.rate_limit_middleware
         
-        admin_validation = rate_limit_middleware.api_key_validator.validate_key(apikey)
+        admin_validation = api_key_validator.validate_key(apikey)
         if not admin_validation["valid"] or admin_validation["tier"] not in ["admin", "dev", "owner"]:
             return ErrorResponse(
                 status=401,
