@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Query, HTTPException, Request
 from app.api.models.BaseResponse import BaseResponse, ErrorResponse
 from app.api.models.AdminModel import FreeKeysResponse, BannedIpsResponse
+from app.api.models.ApiKeyValidator import ApiKeyValidator
 
 router = APIRouter()
+api_key_validator = ApiKeyValidator()
 
 @router.get(
     "/free_keys",
@@ -16,8 +18,6 @@ async def get_free_keys(
     apikey: str = Query(..., description="Admin API key for authorization")
 ):
     try:
-        api_key_validator = request.app.state.api_key_validator
-        
         admin_validation = api_key_validator.validate_key(apikey)
         if not admin_validation["valid"] or admin_validation["tier"] not in ["admin", "dev", "owner"]:
             return ErrorResponse(
