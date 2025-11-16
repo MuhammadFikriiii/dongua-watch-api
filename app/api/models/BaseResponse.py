@@ -27,7 +27,7 @@ class BaseResponse(BaseModel, Generic[T]):
     message: Optional[str] = Field(None, description="Pesan Error jika Data tidak ada.")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "status": 200,
                 "success": True,
@@ -40,7 +40,7 @@ class BaseResponse(BaseModel, Generic[T]):
 class ErrorResponse(BaseResponse[None]):
     data: None = None
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "status": 400,
                 "success": False,
