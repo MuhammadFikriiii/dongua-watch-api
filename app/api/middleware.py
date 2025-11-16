@@ -31,11 +31,18 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         self.data_dir = data_dir
         self.logs_dir = os.path.join(data_dir, "logs")
         self.ip_log_dir = os.path.join(self.logs_dir, "ip_log")
-        self.ensure_directories()
+        self._is_vercel = os.environ.get("VERCEL") == "1"
         
+        if not self._is_vercel:
+            self.ensure_directories()
+
     def ensure_directories(self):
-        os.makedirs(self.ip_log_dir, exist_ok=True)
-        
+        """Create directories only for local development"""
+        try:
+            os.makedirs(self.ip_log_dir, exist_ok=True)
+        except OSError:
+            print("⚠️ Could not create log directories, using in-memory logging")
+
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
         
@@ -62,11 +69,13 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             "response_size": int(response.headers.get("content-length", 0))
         }
         
-        self.log_ip_request(client_ip, log_data)
+        if not self._is_vercel:
+            self.log_ip_request(client_ip, log_data)
         
         return response
-        
+
     def log_ip_request(self, ip: str, log_data: Dict[str, Any]):
+        """Log IP request only for local development"""
         try:
             ip_log_file = os.path.join(self.ip_log_dir, f"{ip}.json")
             logs = []
@@ -77,26 +86,33 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                         logs = json.load(f)
                     except json.JSONDecodeError:
                         logs = []
-                        
+            
             logs.append(log_data)
             
             if len(logs) > 1000:
                 logs = logs[-1000:]
-                
+            
             with open(ip_log_file, 'w') as f:
                 json.dump(logs, f, indent=2)
                 
         except Exception as e:
             print(f"Error logging IP request: {e}")
-            
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, api_key_validator: ApiKeyValidator):
         super().__init__(app)
         self.api_key_validator = api_key_validator
         self.rate_limits = {}
-        self.banned_ips = self.load_banned_ips()
+        self._is_vercel = os.environ.get("VERCEL") == "1"
         
+        if self._is_vercel:
+            self.banned_ips = set()
+            print("🔧 Using in-memory banned IPs for Vercel")
+        else:
+            self.banned_ips = set(self.load_banned_ips())
+
     def load_banned_ips(self) -> List[str]:
+        """Load banned IPs from file for local development"""
         banned_file = os.path.join("data", "banned.json")
         if os.path.exists(banned_file):
             try:
@@ -105,12 +121,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             except (json.JSONDecodeError, FileNotFoundError):
                 return []
         return []
-        
+
     def save_banned_ips(self):
-        banned_file = os.path.join("data", "banned.json")
-        with open(banned_file, 'w') as f:
-            json.dump(self.banned_ips, f, indent=2)
-            
+        """Save banned IPs to file for local development"""
+        if not self._is_vercel:
+            banned_file = os.path.join("data", "banned.json")
+            try:
+                with open(banned_file, 'w') as f:
+                    json.dump(list(self.banned_ips), f, indent=2)
+            except OSError:
+                print("⚠️ Could not save banned IPs")
+
     async def dispatch(self, request: Request, call_next):
         client_ip = request.client.host
         
@@ -120,12 +141,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 content={
                     "status": 403,
                     "success": False,
-                    "author": "zhadev",
+                    "author": "zhsdevv",
                     "data": None,
                     "message": "IP address is banned"
                 }
             )
-            
+        
         api_key = request.query_params.get("apikey")
         validation = self.api_key_validator.validate_key(api_key)
         
@@ -135,15 +156,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 content={
                     "status": 401,
                     "success": False,
-                    "author": "zhadev",
+                    "author": "zhsdevv",
                     "data": None,
                     "message": validation["error"]
                 }
             )
-            
+        
         tier = validation["tier"]
         requests_per_minute = validation["requests_per_minute"]
         requests_per_second = validation.get("requests_per_second")
+        
         rate_limit_key = f"{client_ip}:{tier}"
         current_time = time.time()
         
@@ -153,7 +175,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 "second_requests": [],
                 "last_cleanup": current_time
             }
-            
+        
         rate_data = self.rate_limits[rate_limit_key]
         
         if requests_per_second:
@@ -166,15 +188,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     content={
                         "status": 429,
                         "success": False,
-                        "author": "zhadev",
+                        "author": "zhsdevv",
                         "data": None,
                         "message": "Rate limit exceeded: too many requests per second"
                     }
                 )
-                
+            
             rate_data["second_requests"].append(current_second)
             rate_data["second_requests"] = second_requests[-requests_per_second:]
-            
+        
         current_minute = int(current_time / 60)
         minute_requests = [t for t in rate_data["minute_requests"] if t >= current_minute - 1]
         
@@ -184,22 +206,22 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 content={
                     "status": 429,
                     "success": False,
-                    "author": "zhadev",
+                    "author": "zhsdevv",
                     "data": None,
                     "message": "Rate limit exceeded: too many requests per minute"
                 }
             )
-            
+        
         rate_data["minute_requests"].append(current_minute)
         rate_data["minute_requests"] = minute_requests[-requests_per_minute:]
         
         if current_time - rate_data["last_cleanup"] > 300:
             self.cleanup_old_entries()
             rate_data["last_cleanup"] = current_time
-            
+        
         response = await call_next(request)
         return response
-        
+
     def cleanup_old_entries(self):
         current_time = time.time()
         current_minute = int(current_time / 60)
@@ -212,32 +234,44 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             
             if not rate_data["minute_requests"] and not rate_data["second_requests"]:
                 del self.rate_limits[key]
-                
+
     def ban_ip(self, ip: str):
         if ip not in self.banned_ips:
-            self.banned_ips.append(ip)
+            self.banned_ips.add(ip)
             self.save_banned_ips()
-            
+
     def unban_ip(self, ip: str):
         if ip in self.banned_ips:
             self.banned_ips.remove(ip)
             self.save_banned_ips()
-            
+
     def get_banned_ips(self) -> List[str]:
-        return self.banned_ips.copy()
-        
+        return list(self.banned_ips)
+
 class StatsMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, data_dir: str = "data"):
         super().__init__(app)
         self.data_dir = data_dir
         self.stats_dir = os.path.join(data_dir, "logs", "stats")
-        self.ensure_directories()
+        self._is_vercel = os.environ.get("VERCEL") == "1"
+        
+        if not self._is_vercel:
+            self.ensure_directories()
+        
         self.stats = self.load_stats()
-        
+
     def ensure_directories(self):
-        os.makedirs(self.stats_dir, exist_ok=True)
-        
+        """Create directories only for local development"""
+        try:
+            os.makedirs(self.stats_dir, exist_ok=True)
+        except OSError:
+            print("⚠️ Could not create stats directories, using in-memory stats")
+
     def load_stats(self) -> Dict[str, Any]:
+        """Load stats from file or use in-memory for Vercel"""
+        if self._is_vercel:
+            return self._get_default_stats()
+        
         stats_file = os.path.join(self.stats_dir, "api_stats.json")
         if os.path.exists(stats_file):
             try:
@@ -245,7 +279,10 @@ class StatsMiddleware(BaseHTTPMiddleware):
                     return json.load(f)
             except (json.JSONDecodeError, FileNotFoundError):
                 pass
-              
+        
+        return self._get_default_stats()
+
+    def _get_default_stats(self) -> Dict[str, Any]:
         return {
             "total_requests": 0,
             "unique_ips": set(),
@@ -253,15 +290,20 @@ class StatsMiddleware(BaseHTTPMiddleware):
             "endpoint_requests": {},
             "start_time": datetime.now().isoformat()
         }
-        
+
     def save_stats(self):
-        stats_file = os.path.join(self.stats_dir, "api_stats.json")
-        stats_to_save = self.stats.copy()
-        stats_to_save["unique_ips"] = list(stats_to_save["unique_ips"])
-        
-        with open(stats_file, 'w') as f:
-            json.dump(stats_to_save, f, indent=2)
+        """Save stats to file for local development only"""
+        if not self._is_vercel:
+            stats_file = os.path.join(self.stats_dir, "api_stats.json")
+            stats_to_save = self.stats.copy()
+            stats_to_save["unique_ips"] = list(stats_to_save["unique_ips"])
             
+            try:
+                with open(stats_file, 'w') as f:
+                    json.dump(stats_to_save, f, indent=2)
+            except OSError:
+                print("⚠️ Could not save stats")
+                
     async def dispatch(self, request: Request, call_next):
         client_ip = request.client.host
         path = request.url.path
@@ -280,9 +322,9 @@ class StatsMiddleware(BaseHTTPMiddleware):
         self.stats["requests_by_tier"][tier] = self.stats["requests_by_tier"].get(tier, 0) + 1
         self.stats["endpoint_requests"][path] = self.stats["endpoint_requests"].get(path, 0) + 1
         
-        if self.stats["total_requests"] % 100 == 0:
+        if self.stats["total_requests"] % 100 == 0 and not self._is_vercel:
             self.save_stats()
-            
+        
         return response
         
     def get_stats(self) -> Dict[str, Any]:
