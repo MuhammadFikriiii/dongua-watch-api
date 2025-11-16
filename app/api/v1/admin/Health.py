@@ -1,20 +1,4 @@
-#
-#             Zhadevv Project
-#             --MIT License--
-#
-# Feed Me Starnya Bang:>
-# Project 100% Open Source
-# Bebas Recode, Deploy Production. KECUALI
-# Diperjual-Belikan.
-#
-# Project ini Sepenuhnya Gratis, Makannua ksih Bintang Dong anj:>
-# *bercanda ajahh
-#
-# Regards
-# Zhadevv
-#
-
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Request
 import psutil
 import os
 from datetime import datetime
@@ -30,12 +14,14 @@ router = APIRouter()
     include_in_schema=False
 )
 async def health_check(
+    request: Request,
     apikey: str = Query(..., description="Admin API key for authorization")
 ):
     try:
-        from app.main import rate_limit_middleware
+        api_key_validator = request.app.state.api_key_validator
+        stats_middleware = request.app.state.stats_middleware
         
-        admin_validation = rate_limit_middleware.api_key_validator.validate_key(apikey)
+        admin_validation = api_key_validator.validate_key(apikey)
         if not admin_validation["valid"] or admin_validation["tier"] not in ["admin", "dev", "owner"]:
             return ErrorResponse(
                 status=401,
@@ -51,15 +37,20 @@ async def health_check(
             "timestamp": datetime.now().isoformat(),
             "system": {
                 "cpu_percent": psutil.cpu_percent(),
-                "memory_usage_mb": memory_info.rss / 1024 / 1024,
-                "memory_percent": process.memory_percent(),
-                "disk_usage": psutil.disk_usage('/')._asdict(),
-                "uptime_seconds": psutil.boot_time()
+                "memory_usage_mb": round(memory_info.rss / 1024 / 1024, 2),
+                "memory_percent": round(process.memory_percent(), 2),
+                "disk_usage": {
+                    "total": getattr(psutil.disk_usage('/'), 'total', 0),
+                    "used": getattr(psutil.disk_usage('/'), 'used', 0),
+                    "free": getattr(psutil.disk_usage('/'), 'free', 0),
+                    "percent": getattr(psutil.disk_usage('/'), 'percent', 0)
+                } if hasattr(psutil, 'disk_usage') else {},
+                "uptime_seconds": int(psutil.boot_time()) if hasattr(psutil, 'boot_time') else 0
             },
             "api": {
-                "total_requests": getattr(rate_limit_middleware.stats_middleware.stats, "total_requests", 0),
-                "unique_ips": len(getattr(rate_limit_middleware.stats_middleware.stats, "unique_ips", set())),
-                "start_time": getattr(rate_limit_middleware.stats_middleware.stats, "start_time", datetime.now().isoformat())
+                "total_requests": stats_middleware.stats.get("total_requests", 0),
+                "unique_ips": len(stats_middleware.stats.get("unique_ips", set())),
+                "start_time": stats_middleware.stats.get("start_time", datetime.now().isoformat())
             }
         }
         
