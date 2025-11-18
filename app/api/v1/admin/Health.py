@@ -34,15 +34,20 @@ async def health_check(
         stats_data = {}
         try:
             for middleware in request.app.user_middleware:
-                if hasattr(middleware.cls, 'get_stats'):
-                    stats_instance = middleware.cls(app=request.app)
+                if hasattr(middleware, 'cls') and hasattr(middleware.cls, 'get_stats'):
+                    if hasattr(request.app.state, '_stats_middleware_instance'):
+                        stats_instance = request.app.state._stats_middleware_instance
+                    else:
+                        stats_instance = middleware.cls(app=request.app)
+                        request.app.state._stats_middleware_instance = stats_instance
+                    
                     stats_data = stats_instance.get_stats()
                     break
         except Exception as e:
             print(f"Could not get stats: {e}")
             stats_data = {
                 "total_requests": 0,
-                "unique_ips": set(),
+                "unique_ips_count": 0,
                 "start_time": datetime.now().isoformat()
             }
         
