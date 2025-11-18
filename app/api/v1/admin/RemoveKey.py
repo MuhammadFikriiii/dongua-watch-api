@@ -14,13 +14,12 @@
 # Zhadevv
 #
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, Request
 from app.api.models.BaseResponse import BaseResponse, ErrorResponse
 from app.api.models.AdminModel import RemoveKeyRequest, RemoveKeyResponse
 from app.api.models.ApiKeyValidator import ApiKeyValidator
 
 router = APIRouter()
-api_key_validator = ApiKeyValidator()
 
 @router.delete(
     "/remove_keys",
@@ -30,10 +29,12 @@ api_key_validator = ApiKeyValidator()
     include_in_schema=False
 )
 async def remove_api_key(
+    request: Request,
     keys: str = Query(..., description="API key to remove"),
     apikey: str = Query(..., description="Admin API key for authorization")
 ):
     try:
+        api_key_validator = request.app.state.api_key_validator
         result = api_key_validator.remove_key(keys, apikey)
         
         if not result["success"]:
