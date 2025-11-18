@@ -22,7 +22,7 @@ from app.api.models.ApiKeyValidator import ApiKeyValidator
 router = APIRouter()
 api_key_validator = ApiKeyValidator()
 
-@router.post(
+@router.get(
     "/generate_key",
     response_model=BaseResponse[GenerateKeyResponse],
     summary="Generate API Key",
@@ -30,6 +30,7 @@ api_key_validator = ApiKeyValidator()
     include_in_schema=False
 )
 async def generate_api_key(
+    request: Request,
     user: str = Query(None, description="User identifier"),
     keys: str = Query(None, description="Custom API key"),
     limit: int = Query(5000, description="Monthly request limit"),
@@ -59,3 +60,4 @@ async def generate_api_key(
             success=False,
             message=f"Internal server error: {str(e)}"
         )
+        
