@@ -55,6 +55,7 @@ class ApiKeyValidator:
         
         self.redis_url = os.getenv("REDIS_URL")
         self.redis_client = None
+        self.redis_connected = False
         self._init_redis()
         
         self.admin_keys = {
@@ -64,34 +65,52 @@ class ApiKeyValidator:
         }
         
         self.free_keys = self._load_free_keys()
+        print(f"Redis connected: {self.redis_connected}")
+        print(f"Loaded keys: {len(self.free_keys)}")
 
     def _init_redis(self):
         try:
             if self.redis_url:
                 self.redis_client = redis.from_url(self.redis_url)
+                self.redis_client.ping()
+                self.redis_connected = True
+                print("Redis connection successful")
+            else:
+                print("REDIS_URL not found")
         except Exception as e:
             print(f"Redis connection failed: {e}")
+            self.redis_connected = False
 
     def _load_free_keys(self) -> Dict[str, Any]:
+        if not self.redis_connected:
+            print("Using in-memory storage (Redis not connected)")
+            return {}
+            
         try:
-            if self.redis_client:
-                keys_data = self.redis_client.get("api_free_keys")
-                if keys_data:
-                    return json.loads(keys_data)
+            keys_data = self.redis_client.get("api_free_keys")
+            if keys_data:
+                loaded_keys = json.loads(keys_data)
+                print(f"Loaded {len(loaded_keys)} keys from Redis")
+                return loaded_keys
+            else:
+                print("No keys found in Redis")
+                return {}
         except Exception as e:
             print(f"Failed to load from Redis: {e}")
-        
-        return {}
+            return {}
 
     def _save_free_keys(self):
+        if not self.redis_connected:
+            print("Cannot save - Redis not connected")
+            return False
+            
         try:
-            if self.redis_client:
-                self.redis_client.set("api_free_keys", json.dumps(self.free_keys))
-                return True
+            self.redis_client.set("api_free_keys", json.dumps(self.free_keys))
+            print(f"Saved {len(self.free_keys)} keys to Redis")
+            return True
         except Exception as e:
             print(f"Failed to save to Redis: {e}")
-        
-        return False
+            return False
 
     def validate_key(self, api_key: Optional[str]) -> Dict[str, Any]:
         if not api_key:
@@ -101,6 +120,9 @@ class ApiKeyValidator:
                 "monthly_limit": self.TIERS["guest"].monthly_limit,
                 "requests_per_minute": self.TIERS["guest"].requests_per_minute
             }
+
+        print(f"Validating key: {api_key}")
+        print(f"Available keys: {list(self.free_keys.keys())}")
 
         if api_key in self.free_keys:
             key_data = self.free_keys[api_key]
@@ -176,7 +198,11 @@ class ApiKeyValidator:
         }
 
         self.free_keys[new_key] = key_data
-        self._save_free_keys()
+        saved = self._save_free_keys()
+        
+        print(f"Key generated: {new_key}")
+        print(f"Save successful: {saved}")
+        print(f"Current keys count: {len(self.free_keys)}")
 
         return {
             "success": True,
@@ -240,6 +266,7 @@ class ApiKeyValidator:
         if not admin_validation["valid"] or admin_validation["tier"] not in ["admin", "dev", "owner"]:
             return {"success": False, "error": "Invalid admin API key"}
 
+        print(f"Returning {len(self.free_keys)} keys")
         return {
             "success": True,
             "keys": self.free_keys,
