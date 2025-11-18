@@ -30,6 +30,21 @@ async def health_check(
         
         process = psutil.Process()
         memory_info = process.memory_info()
+
+        stats_data = {}
+        try:
+            for middleware in request.app.user_middleware:
+                if hasattr(middleware.cls, 'get_stats'):
+                    stats_instance = middleware.cls(app=request.app)
+                    stats_data = stats_instance.get_stats()
+                    break
+        except Exception as e:
+            print(f"Could not get stats: {e}")
+            stats_data = {
+                "total_requests": 0,
+                "unique_ips": set(),
+                "start_time": datetime.now().isoformat()
+            }
         
         health_data = {
             "status": "healthy",
@@ -47,9 +62,9 @@ async def health_check(
                 "uptime_seconds": int(psutil.boot_time()) if hasattr(psutil, 'boot_time') else 0
             },
             "api": {
-                "total_requests": stats_middleware.stats.get("total_requests", 0),
-                "unique_ips": len(stats_middleware.stats.get("unique_ips", set())),
-                "start_time": stats_middleware.stats.get("start_time", datetime.now().isoformat())
+                "total_requests": stats_data.stats.get("total_requests", 0),
+                "unique_ips": len(stats_data.stats.get("unique_ips", set())),
+                "start_time": stats_data.stats.get("start_time", datetime.now().isoformat())
             }
         }
         
