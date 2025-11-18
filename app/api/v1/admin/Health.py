@@ -1,13 +1,27 @@
-from fastapi import APIRouter, Query, HTTPException, Request
+#
+#             Zhadevv Project
+#             --MIT License--
+#
+# Feed Me Starnya Bang:>
+# Project 100% Open Source
+# Bebas Recode, Deploy Production. KECUALI
+# Diperjual-Belikan.
+#
+# Project ini Sepenuhnya Gratis, Makannua ksih Bintang Dong anj:>
+# *bercanda ajahh
+#
+# Regards
+# Zhadevv
+#
+
+from fastapi import APIRouter, Query, Request
 import psutil
 import os
 from datetime import datetime
 from app.api.models.BaseResponse import BaseResponse, ErrorResponse
 from app.api.models.ApiKeyValidator import ApiKeyValidator
-from app.api.middleware import StatsMiddleware
 
 router = APIRouter()
-api_key_validator = ApiKeyValidator()
 
 @router.get(
     "/health",
@@ -21,6 +35,7 @@ async def health_check(
     apikey: str = Query(..., description="Admin API key for authorization")
 ):
     try:
+        api_key_validator = request.app.state.api_key_validator
         admin_validation = api_key_validator.validate_key(apikey)
         if not admin_validation["valid"] or admin_validation["tier"] not in ["admin", "dev", "owner"]:
             return ErrorResponse(
@@ -35,17 +50,11 @@ async def health_check(
         stats_data = {}
         try:
             for middleware in request.app.user_middleware:
-                if hasattr(middleware, 'cls') and hasattr(middleware.cls, 'get_stats'):
-                    if hasattr(request.app.state, '_stats_middleware_instance'):
-                        stats_instance = request.app.state._stats_middleware_instance
-                    else:
-                        stats_instance = middleware.cls(app=request.app)
-                        request.app.state._stats_middleware_instance = stats_instance
-                    
+                if hasattr(middleware.cls, 'get_stats'):
+                    stats_instance = middleware.cls(app=request.app)
                     stats_data = stats_instance.get_stats()
                     break
         except Exception as e:
-            print(f"Could not get stats: {e}")
             stats_data = {
                 "total_requests": 0,
                 "unique_ips_count": 0,
@@ -68,9 +77,9 @@ async def health_check(
                 "uptime_seconds": int(psutil.boot_time()) if hasattr(psutil, 'boot_time') else 0
             },
             "api": {
-                "total_requests": stats_data.stats.get("total_requests", 0),
-                "unique_ips": len(stats_data.stats.get("unique_ips", set())),
-                "start_time": stats_data.stats.get("start_time", datetime.now().isoformat())
+                "total_requests": stats_data.get("total_requests", 0),
+                "unique_ips": stats_data.get("unique_ips_count", 0),
+                "start_time": stats_data.get("start_time", datetime.now().isoformat())
             }
         }
         
