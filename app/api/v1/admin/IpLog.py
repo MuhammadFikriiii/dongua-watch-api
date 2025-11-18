@@ -14,7 +14,7 @@
 # Zhadevv
 #
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, Request
 import os
 import json
 from typing import List, Optional
@@ -23,7 +23,6 @@ from app.api.models.AdminModel import IpLogsResponse
 from app.api.models.ApiKeyValidator import ApiKeyValidator
 
 router = APIRouter()
-api_key_validator = ApiKeyValidator()
 
 @router.get(
     "/ip_logs",
@@ -33,14 +32,14 @@ api_key_validator = ApiKeyValidator()
     include_in_schema=False
 )
 async def get_ip_logs(
+    request: Request,
     ip: Optional[str] = Query(None, description="Specific IP address to filter logs"),
     limit: int = Query(100, description="Number of logs to return"),
     apikey: str = Query(..., description="Admin API key for authorization")
 ):
     try:
-        from app.main import RateLimitMiddleware
-        
-        admin_validation = rate_limit_middleware.api_key_validator.validate_key(apikey)
+        api_key_validator = request.app.state.api_key_validator
+        admin_validation = api_key_validator.validate_key(apikey)
         if not admin_validation["valid"] or admin_validation["tier"] not in ["admin", "dev", "owner"]:
             return ErrorResponse(
                 status=401,
