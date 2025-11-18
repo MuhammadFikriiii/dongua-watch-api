@@ -144,7 +144,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             )
             
         api_key = request.query_params.get("apikey")
-        validation = self.api_key_validator.validate_key(api_key)
+        validation = api_key_validator.validate_key(api_key)
         
         if not validation["valid"]:
             return JSONResponse(
