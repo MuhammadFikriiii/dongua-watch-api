@@ -97,9 +97,8 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             print(f"Error logging IP request: {e}")
             
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, api_key_validator: ApiKeyValidator):
+    def __init__(self, app):
         super().__init__(app)
-        self.api_key_validator = api_key_validator
         self.rate_limits = {}
         self._is_vercel = os.environ.get("VERCEL") == "1"
         
@@ -129,6 +128,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 print("Could not save banned IPs")
 
     async def dispatch(self, request: Request, call_next):
+        api_key_validator = request.app.state.api_key_validator
         client_ip = request.client.host
         
         if client_ip in self.banned_ips:
@@ -307,9 +307,8 @@ class StatsMiddleware(BaseHTTPMiddleware):
         self.stats["total_requests"] += 1
         self.stats["unique_ips"].add(client_ip)
         
-        from app.api.models.ApiKeyValidator import ApiKeyValidator
-        validator = ApiKeyValidator()
-        validation = validator.validate_key(api_key)
+        api_key_validator = request.app.state.api_key_validator
+        validation = api_key_validator.validate_key(api_key)
         tier = validation.get("tier", "guest")
         
         self.stats["requests_by_tier"][tier] = self.stats["requests_by_tier"].get(tier, 0) + 1
