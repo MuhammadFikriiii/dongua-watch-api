@@ -14,7 +14,7 @@
 # Zhadevv
 #
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, Request, HTTPException
 from app.api.models.BaseResponse import BaseResponse, ErrorResponse
 from app.api.models.AdminModel import GenerateKeyRequest, GenerateKeyResponse
 from app.api.models.ApiKeyValidator import ApiKeyValidator
