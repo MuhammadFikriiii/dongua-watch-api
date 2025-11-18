@@ -86,7 +86,7 @@ app.add_middleware(CORSMiddleware,
     allow_headers=["*"],
 )
 
-app.add_middleware(RateLimitMiddleware, api_key_validator=api_key_validator)
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(StatsMiddleware)
 
 app.include_router(public_router, prefix="/api/v1")
