@@ -16,10 +16,8 @@
 
 import json
 import os
-import secrets
-import string
 from datetime import datetime
-from typing import Dict, Optional, Any
+from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import redis
@@ -51,9 +49,13 @@ class ApiKeyValidator:
         "owner": ApiKeyTier(name="owner", monthly_limit=-1, requests_per_minute=10000, requests_per_second=10000)
     }
 
-    def __init__(self):
+    def __init__(self, data_dir: str = "data"):
+        self.data_dir = data_dir
+        self.free_keys_file = os.path.join(data_dir, "free_keys.json")
+        
         self.redis_url = os.getenv("REDIS_URL")
         self.redis_client = None
+        self.redis_connected = False
         self._init_redis()
         
         self.admin_keys = {
@@ -63,36 +65,51 @@ class ApiKeyValidator:
         }
         
         self.free_keys = self._load_free_keys()
+        print(f"Redis connected: {self.redis_connected}")
+        print(f"Loaded keys: {len(self.free_keys)}")
 
     def _init_redis(self):
         try:
             if self.redis_url:
                 self.redis_client = redis.from_url(self.redis_url)
                 self.redis_client.ping()
-        except Exception:
-            self.redis_client = None
+                self.redis_connected = True
+                print("Redis connection successful")
+            else:
+                print("REDIS_URL not found")
+        except Exception as e:
+            print(f"Redis connection failed: {e}")
+            self.redis_connected = False
 
     def _load_free_keys(self) -> Dict[str, Any]:
-        if not self.redis_client:
+        if not self.redis_connected:
+            print("Using in-memory storage (Redis not connected)")
             return {}
             
         try:
             keys_data = self.redis_client.get("api_free_keys")
             if keys_data:
-                return json.loads(keys_data)
-        except Exception:
-            pass
-            
-        return {}
+                loaded_keys = json.loads(keys_data)
+                print(f"Loaded {len(loaded_keys)} keys from Redis")
+                return loaded_keys
+            else:
+                print("No keys found in Redis")
+                return {}
+        except Exception as e:
+            print(f"Failed to load from Redis: {e}")
+            return {}
 
     def _save_free_keys(self):
-        if not self.redis_client:
+        if not self.redis_connected:
+            print("Cannot save - Redis not connected")
             return False
             
         try:
             self.redis_client.set("api_free_keys", json.dumps(self.free_keys))
+            print(f"Saved {len(self.free_keys)} keys to Redis")
             return True
-        except Exception:
+        except Exception as e:
+            print(f"Failed to save to Redis: {e}")
             return False
 
     def validate_key(self, api_key: Optional[str]) -> Dict[str, Any]:
@@ -104,13 +121,19 @@ class ApiKeyValidator:
                 "requests_per_minute": self.TIERS["guest"].requests_per_minute
             }
 
+        print(f"Validating key: {api_key}")
+        print(f"Available keys: {list(self.free_keys.keys())}")
+
         if api_key in self.free_keys:
             key_data = self.free_keys[api_key]
             if not key_data.get("is_active", True):
                 return {"valid": False, "error": "API key is inactive"}
             
             tier_name = key_data.get("tier", "free")
-            tier = self.TIERS.get(tier_name, self.TIERS["free"])
+            if tier_name not in self.TIERS:
+                tier_name = "free"
+            
+            tier = self.TIERS[tier_name]
             
             if tier.monthly_limit != -1 and key_data.get("monthly_requests", 0) >= tier.monthly_limit:
                 return {"valid": False, "error": "Monthly limit exceeded"}
@@ -157,6 +180,8 @@ class ApiKeyValidator:
                 return {"success": False, "error": "Custom key already exists"}
             new_key = custom_key
         else:
+            import secrets
+            import string
             characters = string.ascii_letters + string.digits
             new_key = f"SK_Free_Anidong_Keys_{''.join(secrets.choice(characters) for _ in range(16))}"
 
@@ -173,7 +198,11 @@ class ApiKeyValidator:
         }
 
         self.free_keys[new_key] = key_data
-        self._save_free_keys()
+        saved = self._save_free_keys()
+        
+        print(f"Key generated: {new_key}")
+        print(f"Save successful: {saved}")
+        print(f"Current keys count: {len(self.free_keys)}")
 
         return {
             "success": True,
@@ -237,6 +266,7 @@ class ApiKeyValidator:
         if not admin_validation["valid"] or admin_validation["tier"] not in ["admin", "dev", "owner"]:
             return {"success": False, "error": "Invalid admin API key"}
 
+        print(f"Returning {len(self.free_keys)} keys")
         return {
             "success": True,
             "keys": self.free_keys,
