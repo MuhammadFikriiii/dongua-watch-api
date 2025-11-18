@@ -137,7 +137,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 content={
                     "status": 403,
                     "success": False,
-                    "author": "zhsdevv",
+                    "author": "zhadev",
                     "data": None,
                     "message": "IP address is banned"
                 }
@@ -152,7 +152,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 content={
                     "status": 401,
                     "success": False,
-                    "author": "zhsdevv",
+                    "author": "zhadev",
                     "data": None,
                     "message": validation["error"]
                 }
@@ -184,7 +184,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     content={
                         "status": 429,
                         "success": False,
-                        "author": "zhsdevv",
+                        "author": "zhadev",
                         "data": None,
                         "message": "Rate limit exceeded: too many requests per second"
                     }
@@ -202,7 +202,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 content={
                     "status": 429,
                     "success": False,
-                    "author": "zhsdevv",
+                    "author": "zhadev",
                     "data": None,
                     "message": "Rate limit exceeded: too many requests per minute"
                 }
