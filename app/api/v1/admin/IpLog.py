@@ -38,7 +38,7 @@ async def get_ip_logs(
     apikey: str = Query(..., description="Admin API key for authorization")
 ):
     try:
-        from app.main import rate_limit_middleware
+        from app.main import RateLimitMiddleware
         
         admin_validation = rate_limit_middleware.api_key_validator.validate_key(apikey)
         if not admin_validation["valid"] or admin_validation["tier"] not in ["admin", "dev", "owner"]:
