@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from app.api.models.BaseResponse import BaseResponse, ErrorResponse
 from app.api.models.ApiKeyValidator import ApiKeyValidator
+from app.api.middleware import StatsMiddleware
 
 router = APIRouter()
 api_key_validator = ApiKeyValidator()
