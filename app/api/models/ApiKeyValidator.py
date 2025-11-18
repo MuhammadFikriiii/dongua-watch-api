@@ -16,12 +16,12 @@
 
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Optional, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from dotenv import load_dotenv
+import redis
 
-# Load environment variables
 load_dotenv()
 
 class ApiKeyTier(BaseModel):
@@ -52,56 +52,46 @@ class ApiKeyValidator:
     def __init__(self, data_dir: str = "data"):
         self.data_dir = data_dir
         self.free_keys_file = os.path.join(data_dir, "free_keys.json")
-        self._is_vercel = os.environ.get("VERCEL") == "1"
         
-        # Load admin keys from environment
+        self.redis_url = os.getenv("REDIS_URL")
+        self.redis_client = None
+        self._init_redis()
+        
         self.admin_keys = {
             "admin": os.getenv("ADM_KEY", ""),
             "dev": os.getenv("DEV_KEY", ""),
             "owner": os.getenv("OWN_KEY", "")
         }
         
-        if self._is_vercel:
-            # Use in-memory storage for Vercel
-            self.free_keys = {}
-            print("🔧 Using in-memory storage for Vercel environment")
-        else:
-            # Use file-based storage for local development
-            self._ensure_data_dir()
-            self._load_free_keys()
+        self.free_keys = self._load_free_keys()
 
-    def _ensure_data_dir(self):
-        """Create data directory for local development only"""
+    def _init_redis(self):
         try:
-            os.makedirs(self.data_dir, exist_ok=True)
-            if not os.path.exists(self.free_keys_file):
-                with open(self.free_keys_file, 'w') as f:
-                    json.dump({}, f)
-        except OSError as e:
-            print(f"⚠️ Warning: Could not create data directory: {e}")
-            print("🔧 Falling back to in-memory storage")
-            self._is_vercel = True
-            self.free_keys = {}
+            if self.redis_url:
+                self.redis_client = redis.from_url(self.redis_url)
+        except Exception as e:
+            print(f"Redis connection failed: {e}")
 
-    def _load_free_keys(self):
-        """Load free keys from file or use empty dict"""
+    def _load_free_keys(self) -> Dict[str, Any]:
         try:
-            if os.path.exists(self.free_keys_file):
-                with open(self.free_keys_file, 'r') as f:
-                    self.free_keys = json.load(f)
-            else:
-                self.free_keys = {}
-        except (FileNotFoundError, json.JSONDecodeError):
-            self.free_keys = {}
+            if self.redis_client:
+                keys_data = self.redis_client.get("api_free_keys")
+                if keys_data:
+                    return json.loads(keys_data)
+        except Exception as e:
+            print(f"Failed to load from Redis: {e}")
+        
+        return {}
 
     def _save_free_keys(self):
-        """Save free keys to file if not in Vercel"""
-        if not self._is_vercel:
-            try:
-                with open(self.free_keys_file, 'w') as f:
-                    json.dump(self.free_keys, f, indent=2)
-            except OSError as e:
-                print(f"⚠️ Warning: Could not save free keys: {e}")
+        try:
+            if self.redis_client:
+                self.redis_client.set("api_free_keys", json.dumps(self.free_keys))
+                return True
+        except Exception as e:
+            print(f"Failed to save to Redis: {e}")
+        
+        return False
 
     def validate_key(self, api_key: Optional[str]) -> Dict[str, Any]:
         if not api_key:
@@ -112,7 +102,6 @@ class ApiKeyValidator:
                 "requests_per_minute": self.TIERS["guest"].requests_per_minute
             }
 
-        # Check free keys first
         if api_key in self.free_keys:
             key_data = self.free_keys[api_key]
             if not key_data.get("is_active", True):
@@ -145,7 +134,6 @@ class ApiKeyValidator:
                 "total_requests": key_data.get("total_requests", 0)
             }
 
-        # Check admin keys
         for tier_name, env_key in self.admin_keys.items():
             if env_key and api_key == env_key:
                 tier = self.TIERS[tier_name]
