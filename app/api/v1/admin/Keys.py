@@ -1,10 +1,24 @@
-from fastapi import APIRouter, Query, HTTPException, Request
+#
+#             Zhadevv Project
+#             --MIT License--
+#
+# Feed Me Starnya Bang:>
+# Project 100% Open Source
+# Bebas Recode, Deploy Production. KECUALI
+# Diperjual-Belikan.
+#
+# Project ini Sepenuhnya Gratis, Makannua ksih Bintang Dong anj:>
+# *bercanda ajahh
+#
+# Regards
+# Zhadevv
+#
+
+from fastapi import APIRouter, Query, Request
 from app.api.models.BaseResponse import BaseResponse, ErrorResponse
 from app.api.models.AdminModel import FreeKeysResponse, BannedIpsResponse
-from app.api.models.ApiKeyValidator import ApiKeyValidator
 
 router = APIRouter()
-api_key_validator = ApiKeyValidator()
 
 @router.get(
     "/free_keys",
@@ -18,6 +32,7 @@ async def get_free_keys(
     apikey: str = Query(..., description="Admin API key for authorization")
 ):
     try:
+        api_key_validator = request.app.state.api_key_validator
         admin_validation = api_key_validator.validate_key(apikey)
         if not admin_validation["valid"] or admin_validation["tier"] not in ["admin", "dev", "owner"]:
             return ErrorResponse(
@@ -62,6 +77,7 @@ async def get_banned_ips(
     apikey: str = Query(..., description="Admin API key for authorization")
 ):
     try:
+        api_key_validator = request.app.state.api_key_validator
         admin_validation = api_key_validator.validate_key(apikey)
         if not admin_validation["valid"] or admin_validation["tier"] not in ["admin", "dev", "owner"]:
             return ErrorResponse(
@@ -70,7 +86,12 @@ async def get_banned_ips(
                 message="Invalid admin API key"
             )
         
-        banned_ips = rate_limit_middleware.get_banned_ips()
+        banned_ips = []
+        for middleware in request.app.user_middleware:
+            if hasattr(middleware.cls, '__name__') and middleware.cls.__name__ == 'RateLimitMiddleware':
+                rate_instance = middleware.cls(app=request.app)
+                banned_ips = rate_instance.get_banned_ips()
+                break
         
         response_data = BannedIpsResponse(
             success=True,
