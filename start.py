@@ -19,7 +19,7 @@ from decouple import config
 
 if __name__ == "__main__":
     host = config("HOST", default="0.0.0.0")
-    port = config("PORT", default=8000, cast=int)
+    port = config("PORT", default=8008, cast=int)
     debug = config("DEBUG", default=False, cast=bool)
     
     uvicorn.run(
