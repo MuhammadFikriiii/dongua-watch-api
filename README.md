@@ -31,7 +31,7 @@ Anidong API is a powerful and open-source RESTful API built with [FastAPI](https
 
 1. **Clone the repository**
    ```bash
-   git clone git@github.com:yughoz/anidong-api.git
+   git clone git@github.com:zhadevv/anidong-api.git
    cd anidong-api
    ```
 
@@ -102,9 +102,8 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 🙏 Credits
 
-- **Original Author**: [Zhadevv](https://github.com/zhadevv)
-- **Maintainer**: [Yughoz](https://github.com/yughoz)
+- **Contributors**: [Yughoz](https://github.com/yughoz)
 - **Inspiration**: Sanka
 
 ---
-*Made with ❤️ for the Weeb community.*
+*Made with ♥️ for the Weeb community.*
